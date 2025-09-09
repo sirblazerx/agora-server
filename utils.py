@@ -3,6 +3,9 @@ import requests
 import json
 import random
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 CUSTOMER_KEY = os.getenv('CUSTOMER_KEY')
 CUSTOMER_SECRET = os.getenv('CUSTOMER_SECRET')
@@ -132,78 +135,28 @@ def stop_cloud_recording(channel, resource_id, sid):
     return formatted_data
 
 
-def rtt_generate_resource(channel):
-
-    payload = {
-        "instanceId": channel,
-    }
-
-    headers = {}
-
-    headers['Authorization'] = 'basic ' + credential
-
-    headers['Content-Type'] = 'application/json'
-    headers['Access-Control-Allow-Origin'] = '*'
-
-    url = f"https://api.agora.io/v1/projects/{APP_ID}/rtsc/speech-to-text/builderTokens"
-    res = requests.post(url, headers=headers, data=json.dumps(payload))
-
-    data = res.json()
-    tokenName = data["tokenName"]
-
-    return tokenName
-
-
 def start_transcription(channel):
-    tokenName = rtt_generate_resource(channel)
-    url = f"https://api.agora.io/v1/projects/{APP_ID}/rtsc/speech-to-text/tasks?builderToken={tokenName}"
+    url = f"https://api.agora.io/api/speech-to-text/v1/projects/{APP_ID}/join"
     payload = {
-        "audio": {
-            "subscribeSource": "AGORARTC",
-            "agoraRtcConfig": {
-                "channelName": channel,
-                "uid": "100",
-                # "token": "{{channelToken}}",
-                "channelType": "LIVE_TYPE",
-                "subscribeConfig": {
-                    "subscribeMode": "CHANNEL_MODE"
-                },
-                "maxIdleTime": 60
-            }
+        "name": f"stt-task-{channel}",  # Required unique task name
+        "languages": ["en-US", "es-ES"],  # Convert to array
+        "maxIdleTime": 60,
+        "rtcConfig": {
+            "channelName": channel,
+            "pubBotUid": "100",  # Bot that pushes subtitles to channel
+            "pubBotToken": TEMP_TOKEN,
+            "subBotUid": "100"
+            # "subscribeAudioUids": []  # Optional, leave empty for all
         },
-        "config": {
-            "features": [
-                "RECOGNIZE"
-            ],
-            "recognizeConfig": {
-                "language": "en-US,es-ES",
-                "model": "Model",
-                "output": {
-                    "destinations": [
-                        "AgoraRTCDataStream",
-                        "Storage"
-                    ],
-                    "agoraRTCDataStream": {
-                        "channelName": channel,
-                        "uid": "101",
-                        # "token": "{{channelToken}}"
-                    },
-                    "cloudStorage": [
-                        {
-                            "format": "HLS",
-                            "storageConfig": {
-                                "accessKey": ACCESS_KEY,
-                                "secretKey": SECRET_KEY,
-                                "bucket": BUCKET_NAME,
-                                "vendor": 1,
-                                "region": 1,
-                                "fileNamePrefix": [
-                                    "rtt"
-                                ]
-                            }
-                        }
-                    ]
-                }
+        "captionConfig": {
+            "sliceDuration": 60,  # Duration of recorded subtitle files
+            "storage": {
+                "accessKey": ACCESS_KEY,
+                "secretKey": SECRET_KEY,
+                "bucket": BUCKET_NAME,
+                "vendor": 1,  # 1 is for AWS
+                "region": 1,
+                "fileNamePrefix": ["rtt"]
             }
         }
     }
@@ -215,14 +168,29 @@ def start_transcription(channel):
     headers['Content-Type'] = 'application/json'
 
     res = requests.post(url, headers=headers, data=json.dumps(payload))
+    if res.status_code != 200:
+        raise Exception(f"API error: {res.status_code} {res.text}")
     data = res.json()
-    taskID = data["taskId"]
+    if "agent_id" not in data:
+        raise Exception(f"Unexpected response: {data}")
+    return data
 
-    return taskID, tokenName
 
-
-def stop_transcription(task_id, builder_token):
-    url = f"https://api.agora.io/v1/projects/{APP_ID}/rtsc/speech-to-text/tasks/{task_id}?builderToken={builder_token}"
+def start_transcription_simple(channel):
+    url = f"https://api.agora.io/api/speech-to-text/v1/projects/{APP_ID}/join"
+    payload = {
+        "name": f"stt-task-simple-{channel}",  # Required unique task name
+        "languages": ["en-US", "es-ES"],  # Convert to array
+        "maxIdleTime": 60,
+        "rtcConfig": {
+            "channelName": channel,
+            "pubBotUid": "100",  # Bot that pushes subtitles to channel
+            "pubBotToken": TEMP_TOKEN,
+            "subBotUid": "100"
+            # "subscribeAudioUids": []  # Optional, leave empty for all
+        }
+        # No captionConfig - transcription happens but no recording/storage
+    }
 
     headers = {}
 
@@ -230,8 +198,27 @@ def stop_transcription(task_id, builder_token):
 
     headers['Content-Type'] = 'application/json'
 
+    res = requests.post(url, headers=headers, data=json.dumps(payload))
+    if res.status_code != 200:
+        raise Exception(f"API error: {res.status_code} {res.text}")
+    data = res.json()
+    if "agent_id" not in data:
+        raise Exception(f"Unexpected response: {data}")
+    return data
+
+
+def stop_transcription(agent_id):
+    url = f"https://api.agora.io/api/speech-to-text/v1/projects/{APP_ID}/agents/{agent_id}/leave"
+
+    headers = {}
+
+    headers['Authorization'] = 'basic ' + credential
+    
+
+    headers['Content-Type'] = 'application/json'
+
     payload = {}
 
-    res = requests.delete(url, headers=headers, data=payload)
+    res = requests.post(url, headers=headers, data=json.dumps(payload))
     data = res.json()
     return data

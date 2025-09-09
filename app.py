@@ -2,7 +2,7 @@ from flask import Flask, render_template
 import json
 from flask_cors import CORS
 
-from utils import start_cloud_recording, stop_cloud_recording, start_transcription, stop_transcription
+from utils import start_cloud_recording, stop_cloud_recording, start_transcription, stop_transcription, start_transcription_simple
 
 app = Flask(__name__)
 CORS(app)
@@ -11,7 +11,7 @@ CORS(app)
 @app.route('/',)
 def endpoints():
     app_routes = ['/start-recording/<channel>',
-                  '/stop-recording/<channel>/<sid>/<resource_id>', '/start-transcribing/<channel>', '/stop-transcribing/<task_id>/<builder_token>']
+                  '/stop-recording/<channel>/<sid>/<resource_id>', '/start-transcribing/<channel>', '/start-transcribing-simple/<channel>', '/stop-transcribing/<agent_id>']
     return json.dumps(app_routes)
 
 
@@ -31,14 +31,20 @@ def stop_recording(channel, sid, resource_id):
 
 @app.route('/start-transcribing/<path:channel>', methods=['GET', 'POST'])
 def start_transcribing(channel):
-    taskId, builderToken = start_transcription(channel)
-    context = {'taskId': taskId, 'builderToken': builderToken}
-    return json.dumps(context)
+    data = start_transcription(channel)
+    return json.dumps(data)
 
 
-@app.route('/stop-transcribing/<path:task_id>/<path:builder_token>/', methods=['GET', 'POST', 'DELETE'])
-def stop_transcribing(task_id, builder_token):
-    data = stop_transcription(task_id, builder_token)
+@app.route('/start-transcribing-simple/<path:channel>', methods=['GET', 'POST'])
+def start_transcribing_simple(channel):
+    data = start_transcription_simple(channel)
+    return json.dumps(data)
+
+
+@app.route('/stop-transcribing/<path:agent_id>/', methods=['GET','POST'])
+def stop_transcribing(agent_id):
+    print("Stopping transcription for agent_id:", agent_id)
+    data = stop_transcription(agent_id)
     context = {}
     return json.dumps(data)
 
